@@ -23,3 +23,9 @@ target/
 .idea/
 *.iml
 *.iws
+
+# vi text editors files
+*~
+*.bak
+*.bak~
+
