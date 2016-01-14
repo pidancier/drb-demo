@@ -15,20 +15,12 @@
  */
 package fr.gael.drb.demo;
 
-import java.awt.Graphics;
-import java.awt.image.BufferedImage;
-import java.awt.image.ColorModel;
 import java.awt.image.RenderedImage;
-import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
-import java.util.Hashtable;
 
 import javax.imageio.ImageIO;
 import javax.media.jai.RenderedImageList;
-import javax.media.jai.widget.ImageCanvas;
-import javax.swing.JFrame;
-import javax.swing.JPanel;
 
 import org.apache.log4j.Logger;
 
@@ -41,6 +33,10 @@ import fr.gael.drbx.cortex.DrbCortexModel;
 import fr.gael.drbx.image.ImageFactory;
 import fr.gael.drbx.image.jai.RenderingFactory;
 
+/**
+ * Sample class to demonstrates the easy usage of Drb/DrbxCortex/DrvxImage 
+ * modules to manipulates huge images from space.
+ */
 public class ImageConverterDemo
 {
    private static Logger logger = Logger.getLogger(ImageConverterDemo.class);
@@ -62,8 +58,8 @@ public class ImageConverterDemo
       if (args.length < 2)
       {
          System.err.println ("Missing arguments: <command> <product>");
-         System.err.println ("   where command is \"show\", or the expected format");
-         System.err.println ("Example: ImageConverterDemo show /data/alos/product/PSMXXX");
+         System.err.println ("   where 'command' is the expected format");
+         System.err.println ("Example: ImageConverterDemo png  /data/alos/product/PSMXXX");
          System.err.println ("   or    ImageConverterDemo tiff /data/alos/product/PSMXXX");
          System.exit(1);
       }
@@ -96,6 +92,52 @@ public class ImageConverterDemo
       RenderedImage input_image = null;
       try
       {
+         /**
+          * ImageFactory retrieve the images element from DrbCortex definition
+          * of the product type. One product type can contains a collection
+          * of images and, if defined a rendered image. 
+          * The collection of images is the real images ectracted from the data.
+          * According to the query extraction, no modification is applied on it.
+          * It is declared as followed in the cortex OWL definition:
+          * 
+          * <img:descriptor rdf:parseType="Literal">
+          *    <img:raster xmlns:img="http://www.gael.fr/drb/image">
+          *       <img:source>
+          *          (*[matches(name(),"IMG-(H|V){2}-ALPSR.*")])[1]/sarDataFile
+          *       </img:source>
+          *       <img:width>
+          *          dataFileDescriptor/sarRelatedData/totalNumberOfDataGroups
+          *       </img:width>
+          *       <img:height>
+          *           dataFileDescriptor/sarRelatedData/numberOfLinesPerDataSet
+          *       </img:height>
+          *       <img:bandNumber>2</img:bandNumber>
+          *       <img:data sampleModel="pixelInterleaved">
+          *          data(signalData/signalDataRecord/sarSignalData)
+          *       </img:data>
+          *    </img:raster>
+          * </img:descriptor>
+          * 
+          * The rendered image is usually used for display, organizing 
+          * spectral bands to create real color outputs, or modifying color 
+          * depth to be supported by modern display systems, Crossing band
+          * to display specific information (PVI, or complex images formatting).
+          * A sample of a renderer (extracted from alos description):
+          * 
+          * <img:rendering rdf:parseType="Literal">
+          *    <img:operator name="alosL1CGeoTif" xmlns:img="&img;">
+          *       <img:script language="beanshell" version="1.0">
+          *        rgb = JAI.create("bandSelect", source, new int[] {0});
+          *        rgb = JAI.create("scale", rgb, 0.25f, 0.25f);
+          *        rgb = JAI.create("normalize", rgb);
+          *        return JAI.create("bandSelect", rgb, new int[] {0});
+          *       </img:script>
+          *    </img:operator>
+          * </img:rendering>
+          * 
+          * Do not hesitate to look into the gael's cortex topics distributions 
+          * to find out much more examples.
+          */
          input_list = ImageFactory.createImage (node);
          input_image = RenderingFactory.createDefaultRendering(input_list);
       }
@@ -112,88 +154,24 @@ public class ImageConverterDemo
          input_image = input_list;
       }
       
-      ImageConverterDemo icd = new ImageConverterDemo();
-      
-      // Show the image in a frame
-      if ("show".equals(command))
+      // Generates all the images not rendered
+      for (int image_index=0; image_index<input_list.size(); image_index++)
       {
-         BufferedImage image = icd.convertRenderedImgToBuffImg (input_image);
-         ReaderShow window = new ReaderShow(image);
-         window.init();
-         window.setVisible(true);
-      }
-      else
-      {
-         for (int image_index=0; image_index<input_list.size(); image_index++)
-         {
-            File file = File.createTempFile("converter", 
-               "-" + (image_index+1) + "." + command, 
-               new File ("."));
-            
-            logger.info("Saving file " + file.getAbsolutePath());
-            
-            ImageIO.write((RenderedImage)input_list.get(image_index),command,file);
-         }
-      }
-   }
-   
-   /**
-    * This class is a sample code of  a frame to display a BufferedImage
-    */
-   static class ReaderShow extends JFrame 
-   {
-      private static final long serialVersionUID = -3628472241640714476L;
-      BufferedImage image;
-      public ReaderShow(BufferedImage image)
-      {
-         this.image = image;
+         File file = File.createTempFile("image", 
+            "-" + (image_index+1) + "." + command, 
+            new File ("."));
+         
+         logger.info("Saving file " + file.getAbsolutePath());
+         
+         ImageIO.write((RenderedImage)input_list.get(image_index),command,file);
       }
       
-      public void init ()
+      // Also generates the rendered image
+      if (input_image!=null)
       {
-         final JPanel addPanel = new JPanel();
-         addPanel.setLayout( null);
-         addPanel.setBounds( 100, 100, 800, 600 );
-         getContentPane().add(addPanel);
-
-         final ImageCanvas canvas = new ImageCanvas(this.image);
-         canvas.setBounds(0, 0, 800, 600);
-
-         final Graphics g = this.image.createGraphics();
-         final int imageW = addPanel.getWidth();
-         final int imageH = addPanel.getHeight();
-         g.drawImage(this.image, 0, 0, imageW, imageH, null, null);
-
-         // JFrame settings
-         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-         addPanel.add(canvas);
-         setSize(1024, 768);
-         setLocationByPlatform(true);
+         File file=File.createTempFile("rendered", "."+command,new File("."));
+         logger.info("Saving file " + file.getAbsolutePath());
+         ImageIO.write(input_image,command,file);
       }
-      
-   }
-   
-   public BufferedImage convertRenderedImgToBuffImg(final RenderedImage image)
-   {
-      if (image instanceof BufferedImage)
-         return (BufferedImage) image;
-
-      final ColorModel cm = image.getColorModel();
-      final int width = image.getWidth();
-      final int height = image.getHeight();
-      final WritableRaster raster = cm.createCompatibleWritableRaster(width, height);
-      final boolean is_alpha = cm.isAlphaPremultiplied();
-      final Hashtable<String, Object> properties = new Hashtable<String, Object>();
-      final String[] keys = image.getPropertyNames();
-      if (keys != null)
-      {
-         for (int i = 0; i < keys.length; i++)
-         {
-            properties.put(keys[i], image.getProperty(keys[i]));
-         }
-      }
-      final BufferedImage result=new BufferedImage(cm, raster, is_alpha, properties);
-      image.copyData(raster);
-      return result;
    }
 }
